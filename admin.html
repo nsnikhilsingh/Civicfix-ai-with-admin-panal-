@@ -1,0 +1,463 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>CivicFix AI | Admin Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f1f5f9;
+    }
+
+    .admin-wrap {
+      max-width: 1000px;
+      margin: 30px auto;
+      padding: 16px;
+    }
+
+    .admin-box {
+      background: white;
+      color: #1e293b;
+      padding: 22px;
+      margin-bottom: 20px;
+      border-radius: 14px;
+      box-shadow: 0 4px 18px #00000012;
+    }
+
+    .admin-box input,
+    .admin-box select,
+    .admin-box button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+
+    .admin-box button {
+      background: #126b50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .admin-card {
+      border: 1px solid #cbd5e1;
+      padding: 16px;
+      border-radius: 10px;
+      margin: 14px 0;
+      overflow-wrap: anywhere;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .admin-note {
+      color: #b91c1c;
+      font-size: 13px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .stat-card {
+      padding: 16px;
+      background: #f1f5f9;
+      border-radius: 10px;
+      border-left: 4px solid #126b50;
+    }
+
+    .stat-card h3 {
+      font-size: 14px;
+      margin: 0 0 10px;
+    }
+
+    .stat-card p {
+      font-size: 28px;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    .chart-box {
+      max-width: 450px;
+      margin: 20px auto;
+      position: relative;
+    }
+
+    @media (min-width: 600px) {
+      .stats-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header class="site-header">
+  <div class="brand">
+    <div class="brand-icon">C</div>
+    <div>
+      <h1>CivicFix <span>AI</span></h1>
+      <p>Admin Dashboard</p>
+    </div>
+  </div>
+  <a class="header-button" href="index.html">Main Website</a>
+</header>
+
+<main class="admin-wrap">
+
+  <!-- LOGIN -->
+  <section class="admin-box" id="loginBox">
+    <h2>Admin Login</h2>
+    <p>Sign in to manage demo complaints.</p>
+
+    <form id="loginForm">
+      <label for="username">Username</label>
+      <input id="username" autocomplete="username" required>
+
+      <label for="password">Password</label>
+      <input id="password" type="password"
+             autocomplete="current-password" required>
+
+      <button type="submit">Login</button>
+    </form>
+
+    <p id="loginMessage" role="status"></p>
+
+    <p class="admin-note">
+      Demo login only. This is not secure authentication.
+      Do not use it for real or sensitive data.
+    </p>
+  </section>
+
+  <!-- DASHBOARD: HIDDEN BEFORE LOGIN -->
+  <section class="hidden" id="dashboard">
+
+    <!-- STATISTICS -->
+    <section class="admin-box">
+      <h2>Complaint Analytics</h2>
+      <p>Overview of complaints and their current status.</p>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3>Total Complaints</h3>
+          <p id="chartTotal">0</p>
+        </div>
+
+        <div class="stat-card">
+          <h3>Submitted</h3>
+          <p id="chartSubmitted">0</p>
+        </div>
+
+        <div class="stat-card">
+          <h3>In Progress</h3>
+          <p id="chartProgress">0</p>
+        </div>
+
+        <div class="stat-card">
+          <h3>Resolved</h3>
+          <p id="chartResolved">0</p>
+        </div>
+      </div>
+
+      <h3>Complaint Status Chart</h3>
+
+      <div class="chart-box">
+        <canvas id="complaintChart"></canvas>
+      </div>
+
+      <p id="chartMessage" role="status"></p>
+    </section>
+
+    <!-- COMPLAINT MANAGEMENT -->
+    <section class="admin-box">
+      <h2>Complaint Management</h2>
+      <p id="summary">Loading complaints...</p>
+
+      <button type="button" id="refreshButton">
+        Refresh Dashboard
+      </button>
+
+      <button type="button" id="logoutButton">
+        Logout
+      </button>
+
+      <div id="adminComplaints"></div>
+    </section>
+
+  </section>
+</main>
+
+<!-- Load Chart.js once -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+"use strict";
+
+const STORAGE_KEY = "civicfixComplaints";
+const DEMO_USERNAME = "demo";
+const DEMO_PASSWORD = "civic123";
+
+const loginBox = document.getElementById("loginBox");
+const dashboard = document.getElementById("dashboard");
+const loginForm = document.getElementById("loginForm");
+const loginMessage = document.getElementById("loginMessage");
+const adminComplaints = document.getElementById("adminComplaints");
+const summary = document.getElementById("summary");
+
+let statusChart = null;
+
+function getComplaints() {
+  try {
+    const data = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "[]"
+    );
+
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function showLogin() {
+  loginBox.classList.remove("hidden");
+  dashboard.classList.add("hidden");
+}
+
+function showDashboard() {
+  loginBox.classList.add("hidden");
+  dashboard.classList.remove("hidden");
+  renderAdmin();
+}
+
+loginForm.addEventListener("submit", function(event) {
+  event.preventDefault();
+
+  const username =
+    document.getElementById("username").value.trim();
+
+  const password =
+    document.getElementById("password").value;
+
+  if (
+    username === DEMO_USERNAME &&
+    password === DEMO_PASSWORD
+  ) {
+    loginMessage.textContent = "";
+    sessionStorage.setItem("civicfixDemoAdmin", "true");
+    showDashboard();
+  } else {
+    loginMessage.textContent =
+      "Incorrect username or password.";
+  }
+});
+
+function updateAnalytics() {
+  const complaints = getComplaints();
+
+  const submitted = complaints.filter(
+    c => c.status === "Submitted"
+  ).length;
+
+  const progress = complaints.filter(
+    c => c.status === "In Progress"
+  ).length;
+
+  const resolved = complaints.filter(
+    c => c.status === "Resolved"
+  ).length;
+
+  document.getElementById("chartTotal").textContent =
+    complaints.length;
+
+  document.getElementById("chartSubmitted").textContent =
+    submitted;
+
+  document.getElementById("chartProgress").textContent =
+    progress;
+
+  document.getElementById("chartResolved").textContent =
+    resolved;
+
+  const canvas = document.getElementById("complaintChart");
+  const chartMessage = document.getElementById("chartMessage");
+
+  if (typeof Chart === "undefined") {
+    chartMessage.textContent =
+      "Chart library could not load. Check your internet connection.";
+    return;
+  }
+
+  chartMessage.textContent = "";
+
+  if (statusChart) {
+    statusChart.destroy();
+  }
+
+  statusChart = new Chart(canvas, {
+    type: "doughnut",
+    data: {
+      labels: ["Submitted", "In Progress", "Resolved"],
+      datasets: [{
+        data: [submitted, progress, resolved],
+        backgroundColor: [
+          "#f59e0b",
+          "#3b82f6",
+          "#22c55e"
+        ],
+        borderWidth: 2,
+        borderColor: "#ffffff"
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: {
+          position: "bottom"
+        }
+      }
+    }
+  });
+}
+
+function renderAdmin() {
+  const complaints = getComplaints();
+
+  adminComplaints.replaceChildren();
+
+  summary.textContent =
+    "Total complaints: " + complaints.length;
+
+  if (complaints.length === 0) {
+    const empty = document.createElement("p");
+
+    empty.textContent =
+      "No complaints found in this browser. Submit a complaint on the main website first.";
+
+    adminComplaints.appendChild(empty);
+  }
+
+  complaints.forEach(function(complaint) {
+    const card = document.createElement("article");
+    card.className = "admin-card";
+
+    const heading = document.createElement("h3");
+    heading.textContent = complaint.category || "Other";
+
+    const id = document.createElement("p");
+    id.textContent = "ID: " + (complaint.id || "N/A");
+
+    const location = document.createElement("p");
+    location.textContent =
+      "Location: " + (complaint.location || "N/A");
+
+    const description = document.createElement("p");
+    description.textContent = complaint.description || "";
+
+    const priority = document.createElement("p");
+    priority.textContent =
+      "Priority: " + (complaint.priority || "Low");
+
+    const label = document.createElement("label");
+    label.textContent = "Complaint status";
+
+    const select = document.createElement("select");
+
+    ["Submitted", "In Progress", "Resolved"].forEach(
+      function(status) {
+        const option = document.createElement("option");
+        option.value = status;
+        option.textContent = status;
+        select.appendChild(option);
+      }
+    );
+
+    select.value = [
+      "Submitted", "In Progress", "Resolved"
+    ].includes(complaint.status)
+      ? complaint.status
+      : "Submitted";
+
+    label.appendChild(select);
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "button";
+    saveButton.textContent = "Save Status";
+
+    saveButton.addEventListener("click", function() {
+      const latest = getComplaints();
+
+      const target = latest.find(function(item) {
+        return item.id === complaint.id;
+      });
+
+      if (!target) {
+        alert("Complaint not found. Refresh and try again.");
+        renderAdmin();
+        return;
+      }
+
+      target.status = select.value;
+
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(latest)
+        );
+
+        renderAdmin();
+      } catch (error) {
+        alert("Could not save status in this browser.");
+      }
+    });
+
+    card.append(
+      heading,
+      id,
+      location,
+      description,
+      priority,
+      label,
+      saveButton
+    );
+
+    adminComplaints.appendChild(card);
+  });
+
+  updateAnalytics();
+}
+
+document.getElementById("refreshButton")
+  .addEventListener("click", renderAdmin);
+
+document.getElementById("logoutButton")
+  .addEventListener("click", function() {
+    sessionStorage.removeItem("civicfixDemoAdmin");
+    loginForm.reset();
+    showLogin();
+  });
+
+if (sessionStorage.getItem("civicfixDemoAdmin") === "true") {
+  showDashboard();
+} else {
+  showLogin();
+}
+</script>
+
+</body>
+</html>
